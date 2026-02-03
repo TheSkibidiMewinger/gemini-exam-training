@@ -24,26 +24,11 @@ export default async function handler(req, res) {
         const prompt = `
         Generate EXACTLY ${total} ${subject} questions.
 
-        Return ONLY a JSON array.
-        Each item MUST contain EXACTLY these keys:
-        - question
-        - A
-        - B
-        - C
-        - D
-        - CorrectAnswer
-        - Explanation
-
         Rules:
         - Multiple choice (A–D)
         - Only ONE correct answer
-        - DO NOT nest options
-        - DO NOT rename fields
-        - Use plain text only (no LaTeX, no backslashes)
         - Difficulty: ${diff}
-
-        ${explain ? "Include a short explanation." : "Explanation can be empty."}
-        `
+        ${explain ? "- Provide a clear explanation for the correct answer" : ""}
         `;
 
         const response = await ai.models.generateContent({
