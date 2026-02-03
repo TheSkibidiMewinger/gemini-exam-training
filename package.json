@@ -1,0 +1,7 @@
+{
+  "name": "exam-gemini",
+  "type": "module",
+  "dependencies": {
+    "@google/genai": "^0.10.0"
+  }
+}

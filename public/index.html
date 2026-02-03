@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Exam gemini</title>
+
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background: #f0f2f5;
+  padding: 20px;
+}
+
+.box {
+  max-width: 1000px;
+  margin: auto;
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+}
+
+.timer {
+  font-size: 18px;
+  font-weight: bold;
+  text-align: right;
+  color: #d9534f;
+}
+
+.exam-layout {
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  gap: 20px;
+}
+
+.question-box {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.option {
+  display: block;
+  padding: 10px 14px;
+  border: 2px solid #ccc;
+  border-radius: 25px;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+
+.option input {
+  display: none;
+}
+
+.option.selected {
+  background: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+
+.nav-panel {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.qno {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid #bbb;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.qno.active { background:#007bff; color:white; border-color:#007bff; }
+.qno.done { background:#28a745; color:white; border-color:#28a745; }
+.qno.marked { background:#ffc107; border-color:#ffc107; }
+
+.controls {
+  text-align: center;
+  margin-top: 15px;
+}
+
+button {
+  padding: 8px 14px;
+  margin: 4px;
+}
+
+.correct { color: green; }
+.wrong { color: red; }
+
+.explain {
+  background: #f8f9fa;
+  padding: 10px;
+  border-left: 4px solid #007bff;
+  margin-top: 6px;
+}
+
+.settings {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+}
+
+.settings label {
+  display: block;
+  margin-top: 8px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="box">
+  <h2>Exam gemini</h2>
+
+  <!-- ================= SETTINGS PANEL ================= -->
+  <div class="settings">
+    <b>Exam Settings</b>
+
+    <label>
+      Gemini Model:
+      <select id="model">
+        <option value="gemini-3-flash-preview">Gemini 3 Flash preview</option>
+        <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+        <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
+        <option value="gemini-3-pro-preview">Gemini 3 Pro preview</option>
+        <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+      </select>
+    </label>
+
+    <label>
+      API KEY:
+      <input id="key" type="text" value="AIza.." style="width:100%">
+    </label>
+
+
+    <label>
+      Subject / Prompt:
+      <input id="subject" type="text" value="math" style="width:100%">
+    </label>
+
+    <label>
+      Exam Duration (minutes):
+      <input id="minutes" type="number" value="15" min="1">
+    </label>
+
+    <label>
+      Total Questions:
+      <input id="total" type="number" value="20" min="1">
+    </label>
+
+    <label>
+      Difficulty:
+      <input id="difficulty" type="text" value="Olimpiad level" style="width:100%">
+    </label>
+
+    <label>
+      <input id="explain" type="checkbox" checked>
+      Show explanation after submit
+    </label>
+
+    <button onclick="startExam()">Start Exam</button>
+  </div>
+
+  <div class="timer" id="timer">⏱ 00:00</div>
+
+  <div class="exam-layout">
+    <div class="question-box" id="exam"></div>
+
+    <div class="nav-panel">
+      <b>Questions</b>
+      <div id="qnav"></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button onclick="prevQ()">Previous</button>
+    <button onclick="toggleMark()">Mark / Unmark</button>
+    <button onclick="nextQ()">Next</button>
+    <button onclick="submitExam()">Submit</button>
+  </div>
+
+  <div id="result"></div>
+</div>
+
+<script>
+// localstorage
+const keyInput = document.getElementById("key");
+const savedKey = localStorage.getItem("apiKey");
+if (savedKey) keyInput.value = savedKey;
+keyInput.addEventListener("input", e => {
+  localStorage.setItem("apiKey", e.target.value);
+});
+
+// =====================
+// STATE
+// =====================
+let questions = [];
+let answers = {};
+let marked = {};
+let index = 0;
+let timeLeft = 0;
+let timerId;
+let finished = false;
+let showExplanation = false;
+
+// =====================
+// UTIL
+// =====================
+function shuffle(arr) {
+  return arr.sort(() => Math.random() - 0.5);
+}
+
+// =====================
+// START EXAM
+// =====================
+async function startExam() {
+  const subject = document.getElementById("subject").value;
+  const minutes = Number(document.getElementById("minutes").value);
+  const total = Number(document.getElementById("total").value);
+  const diff = document.getElementById("difficulty").value;
+  const model = document.getElementById("model").value;
+  const key = document.getElementById("key").value;
+  showExplanation = document.getElementById("explain").checked;
+
+  const res = await fetch("http://localhost:3000/api/exam", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      subject,
+      total,
+      diff,
+      explain: showExplanation,
+      model,
+      key
+    })
+  });
+
+  const data = await res.json();
+
+  questions = shuffle(data.questions).map(q => {
+    const choices = shuffle(["A", "B", "C", "D"]);
+    const mapped = {};
+    choices.forEach(l => mapped[l] = q[l]);
+
+    return {
+      question: q.question,
+      choices,
+      mapped,
+      correct: q.CorrectAnswer,
+      Explanation: q.Explanation
+    };
+  });
+
+  answers = {};
+  marked = {};
+  index = 0;
+  finished = false;
+  timeLeft = minutes * 60;
+
+  startTimer();
+  render();
+}
+
+// =====================
+// TIMER
+// =====================
+function startTimer() {
+  clearInterval(timerId);
+  timerId = setInterval(() => {
+    timeLeft--;
+    timer.innerText =
+      `⏱ ${Math.floor(timeLeft/60)}:${String(timeLeft%60).padStart(2,"0")}`;
+    if (timeLeft <= 0) submitExam();
+  }, 1000);
+}
+
+// =====================
+// RENDER NAV
+// =====================
+function renderNav() {
+  qnav.innerHTML = "";
+  questions.forEach((_, i) => {
+    const d = document.createElement("div");
+    d.className = "qno";
+    if (i === index) d.classList.add("active");
+    if (answers[i]) d.classList.add("done");
+    if (marked[i]) d.classList.add("marked");
+    d.innerText = i + 1;
+    d.onclick = () => { index = i; render(); };
+    qnav.appendChild(d);
+  });
+}
+
+// =====================
+// RENDER QUESTION
+// =====================
+function render() {
+  const q = questions[index];
+  exam.innerHTML = `
+    <p><b>Question ${index + 1} / ${questions.length}</b></p>
+    <p>${q.question}</p>
+    ${q.choices.map(l => `
+      <label class="option ${answers[index]===l?"selected":""}">
+        <input type="radio" name="ans" value="${l}">
+        ${l}. ${q.mapped[l]}
+      </label>
+    `).join("")}
+  `;
+
+  document.querySelectorAll(".option").forEach(opt => {
+    opt.onclick = () => {
+      answers[index] = opt.innerText.trim()[0];
+      render();
+    };
+  });
+
+  renderNav();
+}
+
+// =====================
+// CONTROLS
+// =====================
+function toggleMark() {
+  marked[index] = !marked[index];
+  renderNav();
+}
+
+function nextQ() {
+  if (index < questions.length - 1) {
+    index++;
+    render();
+  }
+}
+
+function prevQ() {
+  if (index > 0) {
+    index--;
+    render();
+  }
+}
+
+// =====================
+// SUBMIT + REVIEW
+// =====================
+function submitExam() {
+  if (finished) return;
+  finished = true;
+  clearInterval(timerId);
+
+  let score = 0;
+  let review = "";
+
+  questions.forEach((q, i) => {
+    const user = answers[i];
+    if (user === q.correct) score++;
+
+    review += `
+      <p>
+        <b>${i + 1}. ${q.question}</b><br>
+        Your answer:
+        <span class="${user === q.correct ? "correct":"wrong"}">
+          ${user || "None"}
+        </span><br>
+        Correct answer:
+        <span class="correct">${q.correct}</span>
+        ${showExplanation && q.Explanation
+          ? `<div class="explain"><b>Explanation:</b> ${q.Explanation}</div>`
+          : ""}
+      </p>
+    `;
+  });
+
+  exam.innerHTML = review;
+  result.innerHTML = `<h3>Score: ${score} / ${questions.length}</h3>`;
+}
+</script>
+
+</body>
+</html>
