@@ -66,8 +66,14 @@ export default async function handler(req, res) {
             }
         });
 
-        const parsed = JSON.parse(response.text);
-        res.status(200).json({ questions: parsed.slice(0, total) });
+        const parsed =
+        response.candidates?.[0]?.content?.parts?.[0]?.json;
+
+        if (!parsed || !Array.isArray(parsed)) {
+            throw new Error("Invalid JSON returned from Gemini");
+        }
+
+        res.json({ questions: parsed.slice(0, total) });
 
     } catch (err) {
         console.error(err);

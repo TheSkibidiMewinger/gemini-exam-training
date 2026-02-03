@@ -246,7 +246,19 @@ async function startExam() {
 
   const data = await res.json();
 
-  questions = shuffle(data.questions).map(q => {
+  if (!res.ok) {
+    console.error("API error:", data);
+    alert("Failed to generate exam. Check console.");
+    return;
+  }
+
+  if (!data.questions || !Array.isArray(data.questions)) {
+    console.error("Invalid response:", data);
+    alert("Invalid exam data received.");
+    return;
+  }
+
+    questions = shuffle(data.questions).map(q => {
     const choices = shuffle(["A", "B", "C", "D"]);
     const mapped = {};
     choices.forEach(l => mapped[l] = q[l]);
