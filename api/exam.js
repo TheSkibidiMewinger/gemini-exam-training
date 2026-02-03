@@ -24,11 +24,26 @@ export default async function handler(req, res) {
         const prompt = `
         Generate EXACTLY ${total} ${subject} questions.
 
+        Return ONLY a JSON array.
+        Each item MUST contain EXACTLY these keys:
+        - question
+        - A
+        - B
+        - C
+        - D
+        - CorrectAnswer
+        - Explanation
+
         Rules:
         - Multiple choice (A–D)
         - Only ONE correct answer
+        - DO NOT nest options
+        - DO NOT rename fields
+        - Use plain text only (no LaTeX, no backslashes)
         - Difficulty: ${diff}
-        ${explain ? "- Provide a clear explanation for the correct answer" : ""}
+
+        ${explain ? "Include a short explanation." : "Explanation can be empty."}
+        `
         `;
 
         const response = await ai.models.generateContent({
@@ -73,7 +88,19 @@ export default async function handler(req, res) {
             throw new Error("Invalid JSON returned from Gemini");
         }
 
-        res.json({ questions: parsed.slice(0, total) });
+        const normalized = parsed.map((q, i) => ({
+            question: q.question,
+
+            A: q.A ?? q.options?.A,
+            B: q.B ?? q.options?.B,
+            C: q.C ?? q.options?.C,
+            D: q.D ?? q.options?.D,
+
+            CorrectAnswer: q.CorrectAnswer ?? q.answer,
+            Explanation: q.Explanation ?? q.explanation ?? ""
+        }));
+
+        res.json({ questions: normalized.slice(0, total) });
 
     } catch (err) {
         console.error(err);
